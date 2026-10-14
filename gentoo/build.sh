@@ -1,22 +1,36 @@
 #!/bin/bash
 # Build libwebrtc.a for Linux with clang and the system's C++ library, and
 # lay it out the way livekit's webrtc-sys expects (LK_CUSTOM_WEBRTC).
-#   build.sh <src> <destination> [clang prefix]
+#   build.sh <src> <destination>
 set -euo pipefail
-src=$(cd "${1:?usage: build.sh <src> <destination> [clang-prefix]}" && pwd)
+src=$(cd "${1:?usage: build.sh <src> <destination>}" && pwd)
 dest=$(realpath -m "${2:?destination}")
-clang_base=${3:-/usr}
+clang=$(command -v "${CC:-clang}")
 here=$(cd "$(dirname "$0")" && pwd)
 out=${src}/out/gentoo
 arch=${GENTOO_WEBRTC_ARCH:-x64}
 
 mkdir -p "${out}" "${dest}/lib"
+
+# gn looks for clang's runtime under <prefix>/lib/clang/<major>/lib/<triple>,
+# which is not where a distribution puts it, so a prefix of links is made
+resource=$("${clang}" --print-resource-dir)
+major=$("${clang}" -dumpversion | cut -d. -f1)
+clang_base=${out}/clang
+triple_dir=${clang_base}/lib/clang/${major}/lib/x86_64-unknown-linux-gnu
+rm -rf "${clang_base}"
+mkdir -p "${triple_dir}"
+ln -s "$(dirname "$(readlink -f "${clang}")")" "${clang_base}/bin"
+ln -s "${resource}/include" "${clang_base}/lib/clang/${major}/include"
+ln -s "$(find "${resource}/lib" -name 'libclang_rt.builtins-x86_64.a' | head -1)" \
+	"${triple_dir}/libclang_rt.builtins.a"
 cat > "${out}/args.gn" <<EOF
 is_debug = false
 target_os = "linux"
 target_cpu = "${arch}"
 is_clang = true
 clang_base_path = "${clang_base}"
+clang_version = "${major}"
 clang_use_chrome_plugins = false
 use_lld = true
 use_sysroot = false
