@@ -1,0 +1,69 @@
+name: Gentoo source tarball
+
+# A tag named gentoo/<version> produces libwebrtc-<version>.tar.xz: this
+# repository at the tag plus the pinned DEPS it needs, pruned to a Linux
+# build with clang and the system C++ library.
+on:
+  push:
+    tags: ['gentoo/*']
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          path: tag
+          fetch-depth: 1
+
+      - name: Fetch depot_tools
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> "$GITHUB_PATH"
+
+      - name: Sync the sources
+        env:
+          DEPOT_TOOLS_UPDATE: '0'
+          DEPOT_TOOLS_METRICS: '0'
+        run: |
+          mkdir work
+          {
+            echo 'solutions = ['
+            echo '  {'
+            echo '    "name": "src",'
+            echo "    \"url\": \"https://github.com/${GITHUB_REPOSITORY}.git@${GITHUB_SHA}\","
+            echo '    "custom_deps": {'
+            sed 's/.*/      "&": None,/' tag/gentoo/gclient-excludes.txt
+            echo '    },'
+            echo '    "deps_file": "DEPS",'
+            echo '    "managed": False,'
+            echo '  },'
+            echo ']'
+          } > work/.gclient
+          cd work
+          gclient sync -D --no-history --nohooks
+
+      - name: Prune
+        run: work/src/gentoo/prune.sh work/src
+
+      - name: Pack
+        run: |
+          version=${GITHUB_REF_NAME#gentoo/}
+          mv work/src "libwebrtc-${version}"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='2000-01-01 UTC' \
+            -cf - "libwebrtc-${version}" | xz -T0 -9e > "libwebrtc-${version}.tar.xz"
+          sha512sum "libwebrtc-${version}.tar.xz" > "libwebrtc-${version}.tar.xz.sha512"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#gentoo/}
+          gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --title "libwebrtc ${version}" \
+            --notes "WebRTC with the dependencies a Linux build needs." \
+            "libwebrtc-${version}.tar.xz" "libwebrtc-${version}.tar.xz.sha512"
