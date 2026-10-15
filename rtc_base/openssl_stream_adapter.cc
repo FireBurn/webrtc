@@ -1181,7 +1181,7 @@ enum ssl_verify_result_t OpenSSLStreamAdapter::SSLVerifyCallback(
   // Creates certificate chain.
   std::vector<std::unique_ptr<SSLCertificate>> cert_chain;
   for (CRYPTO_BUFFER* cert : chain) {
-    cert_chain.emplace_back(new BoringSSLCertificate(bssl::UpRef(cert)));
+    cert_chain.emplace_back(new BoringSSLCertificate(bssl::UpRef(cert), ssl));
   }
   stream->peer_cert_chain_.reset(new SSLCertChain(std::move(cert_chain)));
 

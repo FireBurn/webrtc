@@ -840,7 +840,7 @@ enum ssl_verify_result_t OpenSSLAdapter::SSLVerifyInternal(SSL* ssl,
     return ssl_verify_invalid;
   }
 
-  BoringSSLCertificate cert(bssl::UpRef(sk_CRYPTO_BUFFER_value(chain, 0)));
+  BoringSSLCertificate cert(bssl::UpRef(sk_CRYPTO_BUFFER_value(chain, 0)), ssl);
   if (!ssl_cert_verifier_->Verify(cert)) {
     RTC_LOG(LS_WARNING) << "Failed to verify certificate using custom callback";
     return ssl_verify_invalid;
@@ -912,7 +912,7 @@ int OpenSSLAdapter::SSLVerifyInternal(int previous_status,
     RTC_LOG(LS_ERROR) << "Failed to allocate CRYPTO_BUFFER.";
     return previous_status;
   }
-  const BoringSSLCertificate cert(std::move(crypto_buffer));
+  const BoringSSLCertificate cert(std::move(crypto_buffer), ssl);
 #else
   const webrtc::OpenSSLCertificate cert(X509_STORE_CTX_get_current_cert(store));
 #endif
